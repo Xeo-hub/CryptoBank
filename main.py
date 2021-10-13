@@ -2,17 +2,42 @@ JSON_FILES_PATH = "D:/PyCharm/Proyectos/CryptoProject/JsonFiles/"
 print(JSON_FILES_PATH)
 
 from users import User
+from json_storage import JsonStore
 
 class CryptoBank:
     def create_account(self, id, password, acc_name, key):
 
-        josete = User(id, password)
+        user = User(id, password)
+        accounts_storage = JsonStore()
+        accounts=accounts_storage.load_store()
+        account=accounts.find_item(user)
         # Descargar la base de datos de las cuentas
 
         # Comprobar si existe id/password
         # Si existe se le añade la cuenta
         # Si no, se crea de 0
-        del josete
+        del user
+
+    def login(self, id, password):
+       self.verify (id, password)
+
+    def verify (self,id, password:None):
+        accounts_storage = JsonStore()
+        accounts = accounts_storage.load_store()
+        if password == None:
+            for item in accounts:
+                for element in item.keys():
+                    if id in element:
+                        print("Busca otro nombre crack")
+            return
+
+        user = User(id, password)
+        for item in accounts:
+            if user in item.keys():
+                print("Sesión iniciada")
+                user.accounts=[]######
+        print("Error")
+
 
     def delete_account(self, id, password, acc_name, key):
         # Descargar la base de datos de las cuentas

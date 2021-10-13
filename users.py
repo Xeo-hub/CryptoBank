@@ -1,7 +1,10 @@
 class User:
     def __init__(self, id, password):
-        self.user = {id: password}
-        self.balance = 0
+        self.user = id
+        self.password=password
+
+    def __repr__(self):
+        return (self.user,self.password)
 
 """class User:
     def __init__(self, id, password):
