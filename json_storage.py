@@ -24,7 +24,7 @@ class JsonStore:
         except FileNotFoundError:
             self._data_list = []
         except json.JSONDecodeError as ex:
-            raise JsonException("JSON Decode Error - Wrong JSON Format") from ex
+            self.empty_store()
 
 
     def add_item(self, item):
@@ -59,6 +59,3 @@ class JsonStore:
                 json.dump(self._data_list, file, indent=2)
         except FileNotFoundError as ex:
             raise JsonException("Wrong file or file path") from ex
-
-store = JsonStore()
-store.add_item(555)
