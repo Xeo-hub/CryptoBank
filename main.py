@@ -5,20 +5,21 @@ from account_storage import Account_Storage
 Crypto = CryptoBank()
 Account_Storage()
 User_Storage()
-while(True):
+final = True
+while(final):
     print("Elige una opción: ")
     if (not Crypto.sign_up):
         print("0: Iniciar Sesión")
         print("1: Crear Sesión")
-    print("2: Crear Cuenta")
-    print("3: Modificar Cuenta")
-    print("4: Eliminar Cuenta")
-    print("5: Depositar dinero")
-    print("6: Sacar dinero")
-    print("7: Hacer Transferencia")
-    print("8: Salir")
-    if ( Crypto.sign_up):
-        print("9: Cerrar Sesión")
+    if (Crypto.sign_up):
+        print("2: Crear Cuenta")
+        print("3: Modificar Cuenta")
+        print("4: Eliminar Cuenta")
+        print("5: Depositar dinero")
+        print("6: Sacar dinero")
+        print("7: Hacer Transferencia")
+        print("8: Cerrar Sesión")
+    print(": Salir")
 
     try:
         control = int(input())
@@ -27,7 +28,7 @@ while(True):
         control = -1
         print("No has introducido un número válido (0-9)")
 
-    if (Crypto.sign_up == False and (control != 0 and control != 1 and control != 8)):
+    if (Crypto.sign_up == False and (control != 0 and control != 1 and control != 9)):
         print("Tienes que iniciar sesión")
     elif(control == 0):
         # Inicio sesión
@@ -85,9 +86,9 @@ while(True):
         else:
             Crypto.transfer(acc_name, key, id2, acc_name2, int(quantity))
     elif (control == 8):
-        # Salir
-        break
-    elif (control == 9):
         # Cerrar sesión
         Crypto.sign_up = False
+    elif (control == 9):
+        # Salir
+        final = False
 

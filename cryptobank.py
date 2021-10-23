@@ -273,8 +273,6 @@ class CryptoBank:
                 if (cond == 2):
                     break
 
-
-
     def sign_out(self):
         # Cerramos sesión
         self.sign_up = False
