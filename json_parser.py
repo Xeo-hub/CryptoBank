@@ -13,8 +13,7 @@ class JsonParser:
             with open(self._file, "r", encoding="utf-8", newline="") as json_file:
                 data = json.load(json_file)
         except FileNotFoundError as ex:
-            print("No existen usuarios en la base de datos")
-            return []
+            raise JsonException("Wrong file or file path") from ex
         except json.JSONDecodeError as ex:
             raise JsonException("JSON Decode Error - Wrong JSON Format") from ex
         return data

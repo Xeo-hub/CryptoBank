@@ -1,6 +1,7 @@
 from cryptobank import CryptoBank
 from user_storage import User_Storage
 from account_storage import Account_Storage
+from key_storage import Key_Storage
 import os
 import cryptography
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -8,6 +9,8 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 Crypto = CryptoBank()
 Account_Storage()
 User_Storage()
+Key_Storage()
+
 final = True
 while(final):
     print("Elige una opción: ")
@@ -18,20 +21,21 @@ while(final):
         print("2: Crear Cuenta")
         print("3: Modificar Cuenta")
         print("4: Eliminar Cuenta")
-        print("5: Depositar dinero")
-        print("6: Sacar dinero")
-        print("7: Hacer Transferencia")
-        print("8: Cerrar Sesión")
-    print("9: Salir")
+        print("5: Consultar Saldo")
+        print("6: Depositar Dinero")
+        print("7: Sacar Dinero")
+        print("8: Hacer Transferencia")
+        print("9: Cerrar Sesión")
+    print("10: Salir")
 
     try:
         control = int(input())
     except ValueError:
         # Indicando error
         control = -1
-        print("No has introducido un número válido (0-9)")
+        print("No has introducido un número válido (0-10)")
 
-    if (Crypto.sign_up == False and (control != 0 and control != 1 and control != 9)):
+    if (Crypto.sign_up == False and (control != 0 and control != 1 and control != 10)):
         print("Tienes que iniciar sesión")
     elif(control == 0):
         # Inicio sesión
@@ -60,6 +64,11 @@ while(final):
         key = input("Introduce la clave de la cuenta: ")
         Crypto.delete_account(acc_name, key)
     elif (control == 5):
+        # Mirar el saldo de la cuenta
+        acc_name = input("Introduce el nombre de la cuenta: ")
+        key = input("Introduce la clave de la cuenta: ")
+        Crypto.check_balance(acc_name, key)
+    elif (control == 6):
         # Depositar dinero
         acc_name = input("Introduce el nombre de la cuenta: ")
         key = input("Introduce la clave de la cuenta: ")
@@ -68,7 +77,7 @@ while(final):
             print("Error: Cantidad invalidad, solo números enteros")
         else:
             Crypto.deposit(acc_name, key, int(quantity))
-    elif (control == 6):
+    elif (control == 7):
         # Sacar dinero
         acc_name = input("Introduce el nombre de la cuenta: ")
         key = input("Introduce la clave de la cuenta: ")
@@ -77,7 +86,7 @@ while(final):
             print("Error: Cantidad invalidad, solo números enteros")
         else:
             Crypto.withdraw(acc_name, key, int(quantity))
-    elif (control == 7):
+    elif (control == 8):
         # Transferir dinero
         acc_name = input("Introduce el nombre de la cuenta: ")
         key = input("Introduce la clave de la cuenta: ")
@@ -88,10 +97,11 @@ while(final):
             print("Error: Cantidad invalidad, solo números enteros")
         else:
             Crypto.transfer(acc_name, key, id2, acc_name2, int(quantity))
-    elif (control == 8):
+    elif (control == 9):
         # Cerrar sesión
         Crypto.sign_up = False
-    elif (control == 9):
+    elif (control == 10):
         # Salir
         final = False
+
 
