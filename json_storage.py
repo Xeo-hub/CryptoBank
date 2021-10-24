@@ -3,7 +3,7 @@ from exceptions import JsonException
 
 class JsonStore:
     """Manages stores based on JsonFiles"""
-    _FILE_PATH = "D:/PyCharm/Proyectos/CryptoProject/JsonFiles/Accounts.json"
+    _FILE_PATH = "C:/Users/Pablo/PycharmProjects/CryptoProject/JsonFiles/Users.json"
     _ID_FIELD = ""
 
     def __init__(self):

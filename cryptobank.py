@@ -1,13 +1,17 @@
+import os
+import base64
 from json_parser import JsonParser
 from users import User
 from accounts import Accounts
 from user_storage import User_Storage
 from account_storage import Account_Storage
+from key_storage import Key_Storage
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-JSON_FILES_PATH = "D:/PyCharm/Proyectos/CryptoProject/JsonFiles/"
+JSON_FILES_PATH = "C:/Users/Pablo/PycharmProjects/CryptoProject/JsonFiles/"
 ACCOUNTS_PATH = JSON_FILES_PATH + "Accounts.json"
 USERS_PATH = JSON_FILES_PATH + "Users.json"
-
+MONEY_KEYS_PATH = JSON_FILES_PATH + "Money_Keys.json"
 
 
 class CryptoBank:
@@ -23,6 +27,10 @@ class CryptoBank:
         # Sacamos los datos de las cuentas
         accounts_storage = JsonParser(ACCOUNTS_PATH)
         return accounts_storage.json_content
+
+    def download_content_keys(self):
+        key_storage = JsonParser(MONEY_KEYS_PATH)
+        return key_storage.json_content
 
     def login(self, id, password):
         # Para iniciar sesión
@@ -80,7 +88,9 @@ class CryptoBank:
                     # La añadimos al fichero de cuentas
                     accounts_storage = Account_Storage()
                     # Quizá encriptar con el user para que no se repita o algo para que no haya repetición
-                    accounts_storage.add_item({str(temp):0})
+                    data = self.encrypt(b"0", b"money")
+                    value = self.encode_to_string(data)
+                    accounts_storage.add_item({str(temp): str(value)})
                     print("Cuenta creada")
                     return
 
@@ -88,6 +98,7 @@ class CryptoBank:
         user_store = User_Storage()
         account_store = Account_Storage()
         user_list = self.download_content_users()
+        key_list = self.download_content_keys()
         # Buscamos el user
         for user in user_list:
             for id in user:
@@ -114,7 +125,7 @@ class CryptoBank:
                             if id == str(temp):
                                 balance = user[id]
                                 account_store.delete_item(user)
-                                account_store.add_item({str(new_account): balance})
+                                account_store.add_item({str(new_account): str(balance)})
                                 print("Cuenta modificada")
                                 return
 
@@ -148,10 +159,10 @@ class CryptoBank:
                     print("Cuenta eliminada")
                     return
 
-
     def deposit(self, acc_name, key, quantity):
         account_store = Account_Storage()
         user_list = self.download_content_users()
+        key_list = self.download_content_keys()
         # Buscamos el user
         for user in user_list:
             for id in user:
@@ -166,16 +177,35 @@ class CryptoBank:
                         for id in account:
                             if id == str(temp):
                                 # Sumamos el dinero
-                                balance = account[id]
+                                # Obtenemos el str que se almacena como dinero
+                                str_value = account[id]
+                                aad = b"money"
+                                # Obtenemos la posición del elemento account
+                                index = account_list.index(account)
+                                # Sacamos la key y el nonce del elemento número "index" del fichero de claves
+                                key = key_list[index][0]
+                                nonce = key_list[index][1]
+                                # Obtenemos los bytes al decodificar el ascii almacenado como dinero
+                                encrypted_value = self.decode_to_bytes(str_value)
+                                # Desencriptamos los bytes y obtenemos el valor entero
+                                balance = self.decrypt(nonce, encrypted_value, aad, key)
                                 account_store.delete_item(account)
                                 balance += quantity
-                                account_store.add_item({str(temp): balance})
+                                # Convertimos el entero a bytes para poder encriptarlo
+                                bytes = self.int_to_bytes(balance)
+                                # Encriptamos los bytes obtenidos
+                                new_encrypted_value = self.encrypt(bytes, b"money")
+                                # Convertimos los bytes en string para poder almacenarlo
+                                value = self.encode_to_string(new_encrypted_value)
+                                # Almacenamos el valor encriptado convertido a ascii
+                                account_store.add_item({str(temp): str(value)})
                                 print("Dinero ingresado")
                                 return
 
     def withdraw(self, acc_name, key, quantity):
         account_store = Account_Storage()
         user_list = self.download_content_users()
+        key_list = self.download_content_keys()
         # Buscamos el user
         for user in user_list:
             for id in user:
@@ -190,13 +220,28 @@ class CryptoBank:
                         for id in account:
                             if id == str(temp):
                                 # Sacamos el dinero
-                                balance = account[id]
+                                str_value = account[id]
+                                aad = b"money"
+                                # Sacamos la key y el nonce del elemento número "account" del fichero de claves
+                                key = key_list[account][0]
+                                nonce = key_list[account][1]
+                                # Obtenemos los bytes al decodificar el ascii almacenado como dinero
+                                encrypted_value = self.decode_to_bytes(str_value)
+                                # Desencriptamos los bytes y obtenemos el valor entero
+                                balance = self.decrypt(nonce, encrypted_value, aad, key)
                                 balance -= quantity
+                                # Convertimos el entero a bytes para poder encriptarlo
+                                bytes = self.int_to_bytes(balance)
+                                # Encriptamos los bytes obtenidos
+                                new_encrypted_value = self.encrypt(bytes, b"money")
+                                # Convertimos los bytes en string para poder almacenarlo
+                                value = self.encode_to_string(new_encrypted_value)
+                                # Almacenamos el valor encriptado convertido a ascii
                                 if (balance < 0):
                                     print("Error: No dispone de tanto dinero en la cuenta")
                                     return
                                 account_store.delete_item(account)
-                                account_store.add_item({str(temp): balance})
+                                account_store.add_item({str(temp): str(value)})
                                 print("Dinero sacado")
                                 return
         print("Error: No existe ninguna cuenta con esos parámetros")
@@ -204,6 +249,7 @@ class CryptoBank:
     def transfer(self, acc_name, key, id2, acc_name2, quantity):
         account_store = Account_Storage()
         user_list = self.download_content_users()
+        key_list = self.download_content_keys()
         temp = None
         cond = 0
         # Buscamos a los dos users
@@ -254,24 +300,94 @@ class CryptoBank:
         for account in account_list:
             for id in account:
                 if id == str(temp):
-                    balance = account[id]
+                    str_value = account[id]
+                    aad = b"money"
+                    # Sacamos la key y el nonce del elemento número "account" del fichero de claves
+                    key = key_list[account][0]
+                    nonce = key_list[account][1]
+                    # Obtenemos los bytes al decodificar el ascii almacenado como dinero
+                    encrypted_value = self.decode_to_bytes(str_value)
+                    # Desencriptamos los bytes y obtenemos el valor entero
+                    balance = self.decrypt(nonce, encrypted_value, aad, key)
                     balance -= quantity
                     if (balance < 0):
                         print("Error: No dispone de tanto dinero en la cuenta")
                         return
+                    # Convertimos el entero a bytes para poder encriptarlo
+                    bytes = self.int_to_bytes(balance)
+                    # Encriptamos los bytes obtenidos
+                    new_encrypted_value = self.encrypt(bytes, b"money")
+                    # Convertimos los bytes en string para poder almacenarlo
+                    value = self.encode_to_string(new_encrypted_value)
+                    # Almacenamos el valor encriptado convertido a ascii
                     account_store.delete_item(account)
-                    account_store.add_item({str(temp): balance})
+                    account_store.add_item({str(temp): str(value)})
                     cond += 1
 
                 if (id.find(sec_user_account) == 0):
-                    balance = account[id]
+                    str_value = account[id]
+                    aad = b"money"
+                    # Sacamos la key y el nonce del elemento número "account" del fichero de claves
+                    key = key_list[account][0]
+                    nonce = key_list[account][1]
+                    # Obtenemos los bytes al decodificar el ascii almacenado como dinero
+                    encrypted_value = self.decode_to_bytes(str_value)
+                    # Desencriptamos los bytes y obtenemos el valor entero
+                    balance = self.decrypt(nonce, encrypted_value, aad, key)
                     balance += quantity
                     account_store.delete_item(account)
-                    account_store.add_item({id: balance})
+                    bytes = self.int_to_bytes(balance)
+                    # Encriptamos los bytes obtenidos
+                    new_encrypted_value = self.encrypt(bytes, b"money")
+                    # Convertimos los bytes en string para poder almacenarlo
+                    value = self.encode_to_string(new_encrypted_value)
+                    # Almacenamos el valor encriptado convertido a ascii
+                    account_store.add_item({id: str(value)})
                     cond += 1
 
                 if (cond == 2):
                     break
+
+    def sign_out(self):
+        # Cerramos sesión
+        self.sign_up = False
+        return
+
+    @staticmethod
+    def encode_to_string(bytes_key):
+        b64_bytes_key = base64.urlsafe_b64encode(bytes_key)
+        b64_string_key = b64_bytes_key.decode("ascii")
+        return b64_string_key
+
+
+    def decode_to_bytes(self, b64_bytes_key_bis):
+        bytes_key_bis = base64.urlsafe_b64decode(b64_bytes_key_bis)
+        b64_string_key = bytes_key_bis.decode("ascii")
+        return b64_string_key
+
+
+    def encrypt(self,data, aad):
+        key_storage = Key_Storage()
+        key = AESGCM.generate_key(bit_length=128)
+        #ALMACENAR KEY EN FICHERO JSON CLAVES
+        aesgcm = AESGCM(key)
+        #ALMACENAR NONCE EN FICHERO JSON CLAVES
+        nonce = os.urandom(12)
+        ct = aesgcm.encrypt(nonce, data, aad)
+        str_key = self.encode_to_string(key)
+        str_nonce = self.encode_to_string(nonce)
+        key_storage.add_item([str_key, str_nonce])
+        return ct
+
+    def decrypt(self, nonce, data, aad, key):
+        aesgcm = AESGCM(key)
+        return aesgcm.decrypt(nonce, data, aad)
+
+    def int_to_bytes(self, x: int) -> bytes:
+        return x.to_bytes((x.bit_length() + 7) // 8, 'big')
+
+    def int_from_bytes(self, xbytes: bytes) -> int:
+        return int.from_bytes(xbytes, 'big')
 
     def sign_out(self):
         # Cerramos sesión
