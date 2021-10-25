@@ -103,5 +103,3 @@ while(final):
     elif (control == 10):
         # Salir
         final = False
-
-

@@ -6,13 +6,15 @@ from accounts import Accounts
 from user_storage import User_Storage
 from account_storage import Account_Storage
 from key_storage import Key_Storage
+from hmac_storage import Hmac_Storage
+from cryptography.hazmat.primitives import hashes, hmac
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-JSON_FILES_PATH = "D:/PyCharm/Proyectos/CryptoProject/JsonFiles/"
+JSON_FILES_PATH = "C:/Users/Pablo/PycharmProjects/CryptoProject/JsonFiles/"
 ACCOUNTS_PATH = JSON_FILES_PATH + "Accounts.json"
 USERS_PATH = JSON_FILES_PATH + "Users.json"
 MONEY_KEYS_PATH = JSON_FILES_PATH + "Money_Keys.json"
-
+HMAC_DATA_PATH = JSON_FILES_PATH + "Hmac_Data.json"
 
 class CryptoBank:
     sign_up = False
@@ -32,15 +34,33 @@ class CryptoBank:
         key_storage = JsonParser(MONEY_KEYS_PATH)
         return key_storage.json_content
 
+    def download_content_hmac(self):
+        hmac_storage = JsonParser(HMAC_DATA_PATH)
+        return hmac_storage.json_content
+
     def login(self, id, password):
         # Para iniciar sesión
         # Cargamos a todos los usarios
         user_list = self.download_content_users()
+        hmac_list = self.download_content_hmac()
         user = User(id, password)
         # Buscamos al usuario en la lista de usuarios
         for item in user_list:
             for key in item:
                 if key == str(user):
+                    # Nos quedamos con la clave hmac del usuario correspondiente
+                    str_clave = hmac_list[key][0]
+                    # Hacemos decode de la clave a bytes
+                    clave = self.decode_to_bytes(str_clave)
+                    # Creamos un hmac con la misma key para asegurarnos que la contraseña no ha sido modificada
+                    h = hmac.HMAC(clave, hashes.SHA256())
+                    # Le metemos la contraseña introducida por parámetros
+                    data = self.decode_to_bytes(password)
+                    # Actualizamos el valor de h introduciendo los datos
+                    h.update(data)
+                    original_signature = self.decode_to_bytes(hmac_list[key][1])
+                    # Hacemos verify para ver si los datos introducidos se corresponden con los del JSON
+                    h.verify(original_signature)
                     # Si coincide existe e inicias la sesión
                     print("Sesion iniciada")
                     self.sign_up = True
@@ -55,13 +75,29 @@ class CryptoBank:
         user_store = User_Storage()
         user_list = self.download_content_users()
         user = User(id, password)
+
         # Buscamos que no exista ya uno con el mismo nombre
         for item in user_list:
             for key in item:
                 if key.find(user.user) == 0:
                     print("Error: Ya existe un usuario con este nombre")
                     return
+
         # Si no, se crea
+        # Creamos el objeto de almacenaje para poder integrar el nuevo hmac en el json
+        hmac_store = Hmac_Storage()
+        # Generamos una key para poder autenticar la contraseña en el futuro
+        key = os.urandom(24)
+        # Creamos objeto hmac con la key generada y el algoritmo SHA256
+        h = hmac.HMAC(key, hashes.SHA256())
+        # Pasamos a bytes la password para poder utilizarla como mensaje
+        data = self.decode_to_bytes(password)
+        # Hasheamos la password
+        h.update(data)
+        signature = h.finalize()
+        str_key = self.encode_to_string(key)
+        str_signature = self.encode_to_string(signature)
+        hmac_store.add_item([str(str_key), str(str_signature)])
         print("Usuario creado")
         self.sign_up = True
         self.current_user = User(id, password)
