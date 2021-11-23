@@ -158,9 +158,10 @@ class CryptoBank:
                     encrypted_scrypt_salt = self.encrypt_with_master_key(salt, self.master_key, self.master_nonce)
                     temp = Accounts(acc_name, scrypt_key)
                     # Si ya tiene una igual no la creamos
-                    if (str(temp) in user[id]):
-                        print("Error: Cuenta ya existente")
-                        return
+                    for account in user[id]:
+                        if acc_name in self.get_before_slice(account):
+                            print("Error: Ya existe una cuenta con ese nombre")
+                            return
                     str_encrypted_salt = self.encode_to_string(encrypted_scrypt_salt)
                     scrypt_store.add_item([str(str_encrypted_salt)])
 
@@ -267,6 +268,8 @@ class CryptoBank:
                                 key = key_list[index][0]
                                 nonce = key_list[index][1]
                                 key_store.delete_item([key, nonce])
+                    self.sign_up = 1
+                    self.current_account = None
                     print("Cuenta eliminada")
                     return
 
