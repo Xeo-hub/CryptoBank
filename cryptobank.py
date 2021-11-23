@@ -6,15 +6,14 @@ from accounts import Accounts
 from user_storage import User_Storage
 from account_storage import Account_Storage
 from key_storage import Key_Storage
-from hmac_storage import Hmac_Storage
-from cryptography.hazmat.primitives import hashes, hmac
+from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 JSON_FILES_PATH = "C:/Users/Pablo/PycharmProjects/CryptoProject/JsonFiles/"
 ACCOUNTS_PATH = JSON_FILES_PATH + "Accounts.json"
 USERS_PATH = JSON_FILES_PATH + "Users.json"
 MONEY_KEYS_PATH = JSON_FILES_PATH + "Money_Keys.json"
-HMAC_DATA_PATH = JSON_FILES_PATH + "Hmac_Data.json"
+# TODO PONER PATH PARA USERS_SALT Y ACCOUNTS_SALT
 
 class CryptoBank:
     sign_up = False
@@ -34,38 +33,32 @@ class CryptoBank:
         key_storage = JsonParser(MONEY_KEYS_PATH)
         return key_storage.json_content
 
-    def download_content_hmac(self):
-        hmac_storage = JsonParser(HMAC_DATA_PATH)
-        return hmac_storage.json_content
+    # TODO DOWNLOAD CONTENT DE USERS_SALT Y ACCOUNTS_SALT (?)
 
     def login(self, id, password):
         # Para iniciar sesión
         # Cargamos a todos los usarios
         user_list = self.download_content_users()
-        hmac_list = self.download_content_hmac()
-        user = User(id, password)
+        scrypt_list = self.download_content_scrypt()
         # Buscamos al usuario en la lista de usuarios
         for item in user_list:
             for key in item:
-                if key == str(user):
-                    # Nos quedamos con la clave hmac del usuario correspondiente
-                    str_clave = hmac_list[key][0]
-                    # Hacemos decode de la clave a bytes
-                    clave = self.decode_to_bytes(str_clave)
-                    # Creamos un hmac con la misma key para asegurarnos que la contraseña no ha sido modificada
-                    h = hmac.HMAC(clave, hashes.SHA256())
-                    # Le metemos la contraseña introducida por parámetros
-                    data = self.decode_to_bytes(password)
-                    # Actualizamos el valor de h introduciendo los datos
-                    h.update(data)
-                    original_signature = self.decode_to_bytes(hmac_list[key][1])
-                    # Hacemos verify para ver si los datos introducidos se corresponden con los del JSON
-                    h.verify(original_signature)
+                if key.find(id) == 0:
+                    # Nos quedamos con el salt asociado al usuario correspondiente
+                    str_encrypted_salt = scrypt_list[key][0]
+                    # Pasamos el salt a bytes
+                    encrypted_salt = self.decode_to_bytes(str_encrypted_salt)
+                    # Desencriptamos el salt
+                    salt = self.decrypt(master_nonce, encrypted_salt, b"master-key", master_key)
+                    # TODO OBTENEMOS LA CONTRASEÑA CIFRADA DE USERS.JSON (stored_key)
+                    # Comparamos la key almacenada con la password introducida y el salt almacenado
+                    self.scrypt_verify(password, salt, stored_key)
                     # Si coincide existe e inicias la sesión
                     print("Sesion iniciada")
                     self.sign_up = True
                     self.current_user = User(id, password)
                     return
+
         # Si no existe
         print("Error: Usuario o contraseña incorrectos")
         return
@@ -84,23 +77,30 @@ class CryptoBank:
                     return
 
         # Si no, se crea
-        # Creamos el objeto de almacenaje para poder integrar el nuevo hmac en el json
-        hmac_store = Hmac_Storage()
-        # Generamos una key para poder autenticar la contraseña en el futuro
-        key = os.urandom(24)
-        # Creamos objeto hmac con la key generada y el algoritmo SHA256
-        h = hmac.HMAC(key, hashes.SHA256())
+        # Creamos el objeto de almacenaje para poder integrar el nuevo salt en el json
+        scrypt_store = Scrypt_Storage()
+        # Generamos un salt para cifrar la contraseña
+        salt = os.urandom(16)
         # Pasamos a bytes la password para poder utilizarla como mensaje
         data = self.decode_to_bytes(password)
-        # Hasheamos la password
-        h.update(data)
-        signature = h.finalize()
-        str_key = self.encode_to_string(key)
-        str_signature = self.encode_to_string(signature)
-        hmac_store.add_item([str(str_key), str(str_signature)])
+
+        # Encriptamos la password
+        scrypt_password = self.scrypt_encrypt(data, salt)
+        # TODO ALMACENAR SALT ENCRIPTADO EN JSON
+        # Ciframos el salt con los parámetros master
+        encrypted_salt = self.encrypt_with_master_key(salt, master_key, master_nonce)
+        str_encrypted_salt = self.encode_to_string(encrypted_salt)
+
+        # TODO ESTOS VALORES SE RECIBEN DEL MAIN, SON INTRODUCIDOS ALLI
+        """str_master_key = (input("Introduce la clave maestra: "))
+        master_key = self.decode_to_bytes(str_master_key)
+        str_master_nonce = (input("Introduce el nonce: "))
+        master_nonce = self.decode_to_bytes(str_master_nonce)"""
+
+        scrypt_store.add_item([str(str_encrypted_salt)])
         print("Usuario creado")
         self.sign_up = True
-        self.current_user = User(id, password)
+        self.current_user = User(id, scrypt_password)
         user_store.add_item({str(self.current_user): []})
         return
 
@@ -108,15 +108,22 @@ class CryptoBank:
         # Buscamos al user
         user_store = User_Storage()
         user_list = self.download_content_users()
+        scrypt_store = Scrypt_Storage()
+        scrypt_list = self.download_content_scrypt()
         for user in user_list:
             for id in user:
                 # Buscamos su cuenta
                 if id == str(self.current_user):
-                    temp = Accounts(acc_name, key)
+                    #TODO ALMACENAR ENCRYPTED_SCRYPT_SALT EN JSON
+                    salt = os.urandom(16)
+                    scrypt_key = self.scrypt_encrypt(key, salt)
+                    encrypted_scrypt_salt = self.encrypt_with_master_key(salt, master_key, master_nonce)
+                    temp = Accounts(acc_name, scrypt_key)
                     # Si ya tiene una igual no la creamos
                     if (str(temp) in user[id]):
                         print("Error: Cuenta ya existente")
                         return
+
                     # La creamos y actualizamos
                     user_store.delete_item(user)
                     user[id].append(str(temp))
@@ -126,13 +133,13 @@ class CryptoBank:
                     # Quizá encriptar con el user para que no se repita o algo para que no haya repetición
                     data = self.encrypt(b"0", b"money")
                     value = self.encode_to_string(data)
-                    print("Dato encriptado ")
-                    print(value)
                     accounts_storage.add_item({str(temp): str(value)})
                     # print("Cuenta creada")
                     return
 
     def modify_account(self, acc_name, key, new_key):
+        # TODO SI SE MODIFICA PASSWORD, HAY QUE RECALCULAR NUEVO SALT, ALMACENARLO EN INDICE CORRESPONDIENTE A USUARIO
+        # TODO ENCRIPTAR KEY Y VERIFICAR, ENCRIPTAR NEW_KEY Y ALMACENAR
         user_store = User_Storage()
         account_store = Account_Storage()
         user_list = self.download_content_users()
@@ -445,41 +452,36 @@ class CryptoBank:
         aesgcm = AESGCM(key)
         #ALMACENAR NONCE EN FICHERO JSON CLAVES
         nonce = os.urandom(12) #bytes
-        print("Dato a encryptar: ")
-        print(data)
-        print("aad al encryptar: ")
-        print(aad)
-        print("key al encryptar: ")
-        print(key)
-        print("Nonce al encryptar: ")
-        print(nonce)
         ct = aesgcm.encrypt(nonce, data, aad)
         str_key = self.encode_to_string(key)
-        print("Key en el json: ")
-        print(str_key)
         str_nonce = self.encode_to_string(nonce)
-        print("Nonce en el json: ")
-        print(str_nonce)
         key_storage.add_item([str_key, str_nonce])
         return ct
 
     def decrypt(self, nonce, data, aad, key):
-        print("aad al desencriptar: ")
-        print(aad)
-        print("nonce al desencriptar: ")
-        print(nonce)
-        print("key al desencriptar: ")
-        print(key)
-        print("dato a desencriptar: ")
-        print(data)
         key = self.decode_to_bytes(key)
-        print("key en bytes: ")
-        print(key)
         nonce = self.decode_to_bytes(nonce)
-        print("nonce en bytes: ")
-        print(nonce)
         aesgcm = AESGCM(key)
         return aesgcm.decrypt(nonce, data, aad)
+
+    def scrypt_encrypt(self, password, salt):
+        kdf = Scrypt(salt=salt, length=32, n=2 ** 14, r=8, p=1)
+        data = self.decode_to_bytes(password)
+        scrypt_key = kdf.derive(data)
+        return scrypt_key
+
+    def scrypt_verify(self, password, salt, key):
+        kdf = Scrypt(salt=salt, length=32, n=2 ** 14, r=8, p=1)
+        kdf.verify(password, key)
+
+    def encrypt_with_master_key(self, data, master_key, master_nonce):
+        aesgcm = AESGCM(master_key)
+        ct = aesgcm.encrypt(master_nonce, data, b"master-key")
+        return ct
+
+    def decrypt_with_master_key(self, data, master_key, master_nonce):
+        aesgcm = AESGCM(master_key)
+        return aesgcm.decrypt(master_nonce, data, b"master-key")
 
     def int_to_bytes(self, x: int) -> bytes:
         return x.to_bytes((x.bit_length() + 7) // 8, 'big')
