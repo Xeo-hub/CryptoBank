@@ -6,17 +6,19 @@ from accounts import Accounts
 from user_storage import User_Storage
 from account_storage import Account_Storage
 from key_storage import Key_Storage
-from scrypt_storage import Scrypt_Storage
+from user_salt_storage import User_Salt_Storage
+from account_salt_storage import Account_Salt_Storage
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from pathlib import Path
 
-JSON_FILES_PATH = "D:/PyCharm/Proyectos/CryptoProject/JsonFiles/"
+JSON_FILES_PATH = "C:/Users/madrid/PycharmProjects/CryptoProject/JsonFiles/"
 # JSON_FILES_PATH = str(Path.home()) + "PyCharm/Proyectos/CryptoProject/JsonFiles/"
 ACCOUNTS_PATH = JSON_FILES_PATH + "Accounts.json"
 USERS_PATH = JSON_FILES_PATH + "Users.json"
 MONEY_KEYS_PATH = JSON_FILES_PATH + "Money_Keys.json"
-SCRYPT_PATH = JSON_FILES_PATH + "Scrypt_storage.json"
+USER_SALT_PATH = JSON_FILES_PATH + "User_salt.json"
+ACCOUNT_SALT_PATH = JSON_FILES_PATH + "Account_salt.json"
 
 
 class CryptoBank:
@@ -71,16 +73,21 @@ class CryptoBank:
         key_storage = JsonParser(MONEY_KEYS_PATH)
         return key_storage.json_content
 
-    def download_content_scrypt(self):
+    def download_content_user_salt(self):
         # Sacamos los datos del scrypt
-        scrypt_storage = JsonParser(SCRYPT_PATH)
+        scrypt_storage = JsonParser(USER_SALT_PATH)
+        return scrypt_storage.json_content
+
+    def download_content_account_salt(self):
+        # Sacamos los datos del scrypt
+        scrypt_storage = JsonParser(ACCOUNT_SALT_PATH)
         return scrypt_storage.json_content
 
     def login(self, id, password):
         # Para iniciar sesión
         # Cargamos a todos los usarios
         user_list = self.download_content_users()
-        scrypt_list = self.download_content_scrypt()
+        scrypt_list = self.download_content_user_salt()
         # Buscamos al usuario en la lista de usuarios
         for item in user_list:
             for key in item:
@@ -124,7 +131,7 @@ class CryptoBank:
 
         # Si no, se crea
         # Creamos el objeto de almacenaje para poder integrar el nuevo salt en el json
-        scrypt_store = Scrypt_Storage()
+        scrypt_store = User_Salt_Storage()
         # Generamos un salt para cifrar la contraseña
         salt = os.urandom(16)
         # Pasamos a bytes la password para poder utilizarla como mensaje
@@ -146,12 +153,11 @@ class CryptoBank:
         # Buscamos al user
         user_store = User_Storage()
         user_list = self.download_content_users()
-        scrypt_store = Scrypt_Storage()
+        scrypt_store = Account_Salt_Storage()
         for user in user_list:
             for id in user:
                 # Buscamos su cuenta
                 if id == str(self.current_user):
-                    #TODO ALMACENAR ENCRYPTED_SCRYPT_SALT EN JSON
                     salt = os.urandom(16)
                     scrypt_key = self.scrypt_encrypt(key, salt)
                     scrypt_key = self.encode_to_string(scrypt_key)
@@ -163,7 +169,7 @@ class CryptoBank:
                             print("Error: Ya existe una cuenta con ese nombre")
                             return
                     str_encrypted_salt = self.encode_to_string(encrypted_scrypt_salt)
-                    scrypt_store.add_item([str(str_encrypted_salt)])
+                    scrypt_store.add_item([str_encrypted_salt])
 
                     # La creamos y actualizamos
                     user_store.delete_item(user)
@@ -183,7 +189,7 @@ class CryptoBank:
 
     def access_account(self, acc_name, key):
         user_list = self.download_content_users()
-        scrypt_list = self.download_content_scrypt()
+        scrypt_list = self.download_content_account_salt()
         # Buscamos el user
         for user in user_list:
             for id in user:
@@ -199,12 +205,10 @@ class CryptoBank:
                     encrypted_salt = self.decode_to_bytes(str_encrypted_salt)
                     salt = self.decrypt_with_master_key(encrypted_salt, self.master_key, self.master_nonce)
                     # Comparamos la key almacenada con la password introducida y el salt almacenado
-                    stored_key = self.get_after_slice(id)
+                    stored_key = self.get_after_slice(user[id][0])
+                    stored_key = self.decode_to_bytes(stored_key)
                     self.scrypt_verify(key.encode('ascii'), salt, stored_key)
-                    temp = Accounts(acc_name, key)
-                    if (str(temp) not in user[id]):
-                        print("Error: No existe la cuenta a la que intenta acceder")
-                        return
+                    temp = Accounts(acc_name, self.encode_to_string(stored_key))
                     self.current_account = temp
                     self.sign_up = 2
                     return

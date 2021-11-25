@@ -2,14 +2,16 @@ from cryptobank import CryptoBank
 from user_storage import User_Storage
 from account_storage import Account_Storage
 from key_storage import Key_Storage
-from scrypt_storage import Scrypt_Storage
+from user_salt_storage import User_Salt_Storage
+from account_salt_storage import Account_Salt_Storage
 
 # Inicializamos para evitar errores
 Crypto = CryptoBank()
 Account_Storage()
 User_Storage()
 Key_Storage()
-Scrypt_Storage()
+User_Salt_Storage()
+Account_Salt_Storage()
 
 final = True
 #Crypto.master_key = input("Acceso al sistema. \nIntroduce la clave maestra\n")
