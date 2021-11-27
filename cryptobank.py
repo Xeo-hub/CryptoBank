@@ -1,5 +1,8 @@
 import os
 import base64
+
+from cryptography.exceptions import InvalidTag, InvalidKey
+
 from json_parser import JsonParser
 from users import User
 from accounts import Accounts
@@ -10,10 +13,9 @@ from user_salt_storage import User_Salt_Storage
 from account_salt_storage import Account_Salt_Storage
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from pathlib import Path
 
-JSON_FILES_PATH = "C:/Users/madrid/PycharmProjects/CryptoProject/JsonFiles/"
-# JSON_FILES_PATH = str(Path.home()) + "PyCharm/Proyectos/CryptoProject/JsonFiles/"
+#JSON_FILES_PATH = "C:/Users/madrid/PycharmProjects/CryptoProject/JsonFiles/"
+JSON_FILES_PATH = "D:/PyCharm/Proyectos/CryptoProject2/JsonFiles/"
 ACCOUNTS_PATH = JSON_FILES_PATH + "Accounts.json"
 USERS_PATH = JSON_FILES_PATH + "Users.json"
 MONEY_KEYS_PATH = JSON_FILES_PATH + "Money_Keys.json"
@@ -94,20 +96,28 @@ class CryptoBank:
                 if key.find(id) == 0:
                     index = user_list.index(item)
                     # Nos quedamos con el salt asociado al usuario correspondiente
-                    str_encrypted_salt = scrypt_list[index][0]
+                    str_encrypted_salt = scrypt_list[index]
                     # Pasamos el salt a bytes
                     encrypted_salt = self.decode_to_bytes(str_encrypted_salt)
                     # Desencriptamos el salt
                     stored_key = self.get_after_slice(key)
+                    self.sign_up = 1
                     self.current_user = User(id, stored_key)
-                    stored_key = self.decode_to_bytes(stored_key)
-                    self.sign_up = True
-
-                    salt = self.decrypt_with_master_key(encrypted_salt, self.master_key, self.master_nonce)
-                    # TODO OBTENEMOS LA CONTRASEÑA CIFRADA DE USERS.JSON (stored_key)
+                    try:
+                        salt = self.decrypt_with_master_key(encrypted_salt, self.master_key, self.master_nonce)
+                    except InvalidTag:
+                        print("Acceso no permitido al sistema")
+                        exit(-2)
                     # Comparamos la key almacenada con la password introducida y el salt almacenado
                     scrypt_password = password.encode('ascii')
-                    self.scrypt_verify(scrypt_password, salt, stored_key)
+                    stored_key = self.decode_to_bytes(stored_key)
+                    try:
+                        self.scrypt_verify(scrypt_password, salt, stored_key)
+                    except InvalidKey:
+                        self.sign_up = 0
+                        self.current_user = None
+                        print("Contraseña incorrecta")
+                        return
                     # Si coincide existe e inicias la sesión
                     print("Sesion iniciada")
 
@@ -144,7 +154,7 @@ class CryptoBank:
         # Ciframos el salt con los parámetros master
         encrypted_salt = self.encrypt_with_master_key(salt, self.master_key, self.master_nonce)
         str_encrypted_salt = self.encode_to_string(encrypted_salt)
-        scrypt_store.add_item([str(str_encrypted_salt)])
+        scrypt_store.add_item(str_encrypted_salt)
         print("Usuario creado")
         user_store.add_item({str(self.current_user): []})
         return
@@ -153,23 +163,26 @@ class CryptoBank:
         # Buscamos al user
         user_store = User_Storage()
         user_list = self.download_content_users()
-        scrypt_store = Account_Salt_Storage()
+        scrypt_account_store = Account_Salt_Storage()
+        scrypt_user_store = User_Salt_Storage()
+        scrypt_user_list = self.download_content_user_salt()
         for user in user_list:
             for id in user:
                 # Buscamos su cuenta
                 if id == str(self.current_user):
                     salt = os.urandom(16)
                     scrypt_key = self.scrypt_encrypt(key, salt)
-                    scrypt_key = self.encode_to_string(scrypt_key)
                     encrypted_scrypt_salt = self.encrypt_with_master_key(salt, self.master_key, self.master_nonce)
+                    encr_salt_xor_key = self.xor(encrypted_scrypt_salt, key.encode('ascii'))
+                    scrypt_key = self.encode_to_string(scrypt_key)
+
                     temp = Accounts(acc_name, scrypt_key)
                     # Si ya tiene una igual no la creamos
                     for account in user[id]:
                         if acc_name in self.get_before_slice(account):
                             print("Error: Ya existe una cuenta con ese nombre")
                             return
-                    str_encrypted_salt = self.encode_to_string(encrypted_scrypt_salt)
-                    scrypt_store.add_item([str_encrypted_salt])
+                    scrypt_account_store.add_item(self.encode_to_string(encr_salt_xor_key))
 
                     # La creamos y actualizamos
                     user_store.delete_item(user)
@@ -182,6 +195,10 @@ class CryptoBank:
                     data = self.encrypt(money_bytes, b"money")
                     value = self.encode_to_string(data)
                     accounts_storage.add_item({str(temp): str(value)})
+                    index = user_list.index(user)
+                    scrypt = scrypt_user_list[index]
+                    scrypt_user_store.delete_item(scrypt)
+                    scrypt_user_store.add_item(scrypt)
                     print("Cuenta creada")
                     self.current_account = temp
                     self.sign_up = 2
@@ -199,24 +216,51 @@ class CryptoBank:
                         print("Error: No existen cuentas para este usuario")
                         return
                     # Depende de como lo vayamos a almacenar
+
+                    cond = 0
+                    for account in user[id]:
+                        stored_acc_name = self.get_before_slice(account)
+                        if (stored_acc_name == acc_name):
+                            cond = 1
+                            break
+                    if (cond == 0):
+                        print("Nombre de cuenta incorrecto")
+                        return
+
+
                     # Como sea obtienes el salt
-                    index = user_list.index(user)
-                    str_encrypted_salt = scrypt_list[index][0]
-                    encrypted_salt = self.decode_to_bytes(str_encrypted_salt)
-                    salt = self.decrypt_with_master_key(encrypted_salt, self.master_key, self.master_nonce)
-                    # Comparamos la key almacenada con la password introducida y el salt almacenado
-                    stored_key = self.get_after_slice(user[id][0])
-                    stored_key = self.decode_to_bytes(stored_key)
-                    self.scrypt_verify(key.encode('ascii'), salt, stored_key)
+                    cond = 0
+                    for account_salt in scrypt_list:
+                        encr_salt_xor_key = self.decode_to_bytes(account_salt)
+                        encr_salt = self.xor(encr_salt_xor_key, key.encode('ascii'))
+                        try:
+                            salt = self.decrypt_with_master_key(encr_salt, self.master_key, self.master_nonce)
+                            # Comparamos la key almacenada con la password introducida y el salt almacenado
+                            stored_key = self.get_after_slice(account)
+                            stored_key = self.decode_to_bytes(stored_key)
+                            self.scrypt_verify(key.encode('ascii'), salt, stored_key)
+                            cond = 1
+                            break
+                        except:
+                            continue
+                    if (cond == 0):
+                        print("Clave incorrecta")
+                        return
+
+
                     temp = Accounts(acc_name, self.encode_to_string(stored_key))
                     self.current_account = temp
                     self.sign_up = 2
+                    print("Accedido a cuenta")
                     return
+        print("No existe la cuenta a la que intentas acceder")
 
     def modify_account(self, acc_name, new_key):
         user_store = User_Storage()
         account_store = Account_Storage()
         user_list = self.download_content_users()
+        scrypt_user_store = User_Salt_Storage()
+        scrypt_user_list = self.download_content_user_salt()
         # Buscamos el user
         for user in user_list:
             for id in user:
@@ -231,6 +275,10 @@ class CryptoBank:
                     user[id].remove(str(self.current_account))
                     user[id].append(str(new_account))
                     user_store.add_item(user)
+                    index = user_list.index(user)
+                    scrypt = scrypt_user_list[index]
+                    scrypt_user_store.delete_item(scrypt)
+                    scrypt_user_store.add_item(scrypt)
                     # La modificamos en el fichero de cuentas
                     account_list = self.download_content_accounts()
                     for user in account_list:
@@ -247,6 +295,8 @@ class CryptoBank:
         key_store = Key_Storage()
         account_store = Account_Storage()
         user_list = self.download_content_users()
+        scrypt_user_store = User_Salt_Storage()
+        scrypt_user_list = self.download_content_user_salt()
         # Buscamos el user
         for user in user_list:
             for id in user:
@@ -259,6 +309,10 @@ class CryptoBank:
                     user_storage.delete_item(user)
                     user[id].remove(str(self.current_account))
                     user_storage.add_item(user)
+                    index = user_list.index(user)
+                    scrypt = scrypt_user_list[index]
+                    scrypt_user_store.delete_item(scrypt)
+                    scrypt_user_store.add_item(scrypt)
                     # Actualizamos en el fichero de cuentas
                     account_list = self.download_content_accounts()
                     key_list = self.download_content_keys()
@@ -581,6 +635,9 @@ class CryptoBank:
             if (letra == "/"):
                 encontrado = True
         return result
+
+    def xor(self, bytes1, bytes2):
+        return bytes(a ^ b for a, b in zip(bytes1, bytes2))
 
     def sign_out(self):
         self.current_user= None

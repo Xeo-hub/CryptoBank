@@ -40,9 +40,9 @@ while(final):
     except ValueError:
         # Indicando error
         control = -1
-        print("No has introducido un número válido (0-11)")
+        print("No has introducido un número válido (0-12)")
 
-    if (Crypto.sign_up == 0 and (control != 0 and control != 1 and control != 11)):
+    if (Crypto.sign_up == 0 and (control != 0 and control != 1 and control != 12)):
         print("Tienes que iniciar sesión")
     elif(Crypto.sign_up == 0 and control == 0):
         # Inicio sesión
@@ -57,19 +57,31 @@ while(final):
     elif (Crypto.sign_up == 1 and control == 2):
         # Crear cuenta bancaria
         acc_name = input("Introduce un nombre para la cuenta: ")
-        key = input("Introduce una clave para la cuenta: ")
+        while(True):
+            key = input("Introduce una clave para la cuenta. Mínima longitud 32 caracteres: ")
+            if (len(key)>=32):
+                break
+            print("La clave de la cuenta debe tener longitud 32 o más")
         Crypto.create_account(acc_name, key)
     elif (Crypto.sign_up == 1 and control == 3):
         #Acceder a cuenta bancaria
         acc_name = input("Introduce el nombre de la cuenta: ")
-        key = input("Introduce la clave de la cuenta: ")
+        while (True):
+            key = input("Introduce la clave de la cuenta. Mínima longitud 32 caracteres: ")
+            if (len(key) >= 32):
+                break
+            print("La clave de la cuenta debe tener longitud 32 o más")
         Crypto.access_account(acc_name, key)
     elif (Crypto.sign_up == 1 and control == 4):
         Crypto.sign_out()
     elif (Crypto.sign_up == 2 and control == 5):
         # Modificar cuenta bancaria
         acc_name = input("Introduce el nombre de la cuenta: ")
-        new_key = input("Introduce la nueva clave para la cuenta: ")
+        while (True):
+            new_key = input("Introduce la nueva clave para la cuenta. Mínima longitud 32 caracteres: ")
+            if (len(new_key) >= 32):
+                break
+            print("La clave de la cuenta debe tener longitud 32 o más")
         Crypto.modify_account(acc_name, new_key)
     elif (Crypto.sign_up == 2 and control == 6):
         # Eliminar cuenta bancaria
@@ -107,3 +119,7 @@ while(final):
         # Salir
         final = False
 
+    elif (control == 100):
+        print(Crypto.current_user)
+    elif (control == 101):
+        print(Crypto.current_account)
