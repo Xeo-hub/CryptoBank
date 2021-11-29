@@ -255,18 +255,55 @@ class CryptoBank:
                     return
         print("No existe la cuenta a la que intentas acceder")
 
-    def modify_account(self, acc_name, new_key):
+    def modify_account(self, acc_name,key, new_key):
         user_store = User_Storage()
         account_store = Account_Storage()
         user_list = self.download_content_users()
         scrypt_user_store = User_Salt_Storage()
         scrypt_user_list = self.download_content_user_salt()
+        scrypt_account_list = self.download_content_account_salt()
+        scrypt_account_store = Account_Salt_Storage()
         # Buscamos el user
         for user in user_list:
             for id in user:
                 # Si existe modificamos la cuenta
                 if id == str(self.current_user):
-                    new_account = Accounts(acc_name, new_key)
+                    cond = 0
+                    for account in user[id]:
+                        stored_acc_name = self.get_before_slice(account)
+                        if (stored_acc_name == acc_name):
+                            cond = 1
+                            break
+                    if (cond == 0):
+                        print("Nombre de cuenta incorrecto")
+                        return
+                    cond = 0
+                    for account_salt in scrypt_account_list:
+                        encr_salt_xor_key = self.decode_to_bytes(account_salt)
+                        encr_salt = self.xor(encr_salt_xor_key, key.encode('ascii'))
+                        try:
+                            salt = self.decrypt_with_master_key(encr_salt, self.master_key, self.master_nonce)
+                            # Comparamos la key almacenada con la password introducida y el salt almacenado
+                            stored_key = self.get_after_slice(str(self.current_account))
+                            stored_key = self.decode_to_bytes(stored_key)
+                            self.scrypt_verify(key.encode('ascii'), salt, stored_key)
+                            cond = 1
+                            break
+                        except:
+                            continue
+                    if (cond == 0):
+                        print("Clave original incorrecta")
+                        return
+                    scrypt_account_store.delete_item(account_salt)
+                    #Generamos el nuevo scrypt para la nueva clave
+                    salt = os.urandom(16)
+                    scrypt_key = self.scrypt_encrypt(new_key, salt)
+                    encrypted_scrypt_salt = self.encrypt_with_master_key(salt, self.master_key, self.master_nonce)
+                    encr_salt_xor_key = self.xor(encrypted_scrypt_salt, new_key.encode('ascii'))
+                    scrypt_account_store.add_item(self.encode_to_string(encr_salt_xor_key))
+                    new_key_scrypted = self.encode_to_string(scrypt_key)
+
+                    new_account = Accounts(acc_name, new_key_scrypted)
                     if (str(new_account) in user[id]):
                         print("Error: Intentas modificar a una cuenta ya existente")
                         return
@@ -287,6 +324,7 @@ class CryptoBank:
                                 balance = user[id]
                                 account_store.delete_item(user)
                                 account_store.add_item({str(new_account): str(balance)})
+                                self.current_account = new_account
                                 print("Cuenta modificada")
                                 return
 

@@ -46,17 +46,37 @@ while(final):
         print("Tienes que iniciar sesión")
     elif(Crypto.sign_up == 0 and control == 0):
         # Inicio sesión
-        username = input("Introduce tu nombre de usuario: ")
-        password = input("Introduce tu contraseña: ")
+        while(True):
+            username = input("Introduce tu nombre de usuario. Mínima longitud 8 caracteres: ")
+            if len(username) >= 8:
+                break
+            print("El nombre de usuario debe tener longitud 8 o más")
+        while(True):
+            password = input("Introduce tu contraseña: ")
+            if len(password) >= 8:
+                break
+            print("La contraseña debe tener longitud 8 o más")
         Crypto.login(username,password)
     elif (Crypto.sign_up == 0 and control == 1):
         # Crear cuenta
-        username = input("Introduce un nombre de usuario: ")
-        password = input("Introduce una contraseña: ")
+        while (True):
+            username = input("Introduce tu nombre de usuario. Mínima longitud 8 caracteres: ")
+            if len(username) >= 8:
+                break
+            print("El nombre de usuario debe tener longitud 8 o más")
+        while (True):
+            password = input("Introduce tu contraseña: ")
+            if len(password) >= 8:
+                break
+            print("La contraseña debe tener longitud 8 o más")
         Crypto.new_user_account(username, password)
     elif (Crypto.sign_up == 1 and control == 2):
         # Crear cuenta bancaria
-        acc_name = input("Introduce un nombre para la cuenta: ")
+        while(True):
+            acc_name = input("Introduce un nombre para la cuenta. Mínima longitud 8 caracteres: ")
+            if len(acc_name) >= 8:
+                break
+            print("El nombre de la cuenta debe tener longitud 8 o más")
         while(True):
             key = input("Introduce una clave para la cuenta. Mínima longitud 32 caracteres: ")
             if (len(key)>=32):
@@ -65,7 +85,11 @@ while(final):
         Crypto.create_account(acc_name, key)
     elif (Crypto.sign_up == 1 and control == 3):
         #Acceder a cuenta bancaria
-        acc_name = input("Introduce el nombre de la cuenta: ")
+        while (True):
+            acc_name = input("Introduce un nombre para la cuenta. Mínima longitud 8 caracteres: ")
+            if len(acc_name) >= 8:
+                break
+            print("El nombre de la cuenta debe tener longitud 8 o más")
         while (True):
             key = input("Introduce la clave de la cuenta. Mínima longitud 32 caracteres: ")
             if (len(key) >= 32):
@@ -76,13 +100,22 @@ while(final):
         Crypto.sign_out()
     elif (Crypto.sign_up == 2 and control == 5):
         # Modificar cuenta bancaria
-        acc_name = input("Introduce el nombre de la cuenta: ")
+        while (True):
+            acc_name = input("Introduce un nombre para la cuenta. Mínima longitud 8 caracteres: ")
+            if len(acc_name) >= 8:
+                break
+            print("El nombre de la cuenta debe tener longitud 8 o más")
+        while (True):
+            key = input("Introduce la clave original de la cuenta. Mínima longitud 32 caracteres: ")
+            if (len(key) >= 32):
+                break
+            print("La clave de la cuenta debe tener longitud 32 o más")
         while (True):
             new_key = input("Introduce la nueva clave para la cuenta. Mínima longitud 32 caracteres: ")
             if (len(new_key) >= 32):
                 break
             print("La clave de la cuenta debe tener longitud 32 o más")
-        Crypto.modify_account(acc_name, new_key)
+        Crypto.modify_account(acc_name,key, new_key)
     elif (Crypto.sign_up == 2 and control == 6):
         # Eliminar cuenta bancaria
         Crypto.delete_account()
@@ -105,8 +138,16 @@ while(final):
             Crypto.withdraw(int(quantity))
     elif (Crypto.sign_up == 2 and control == 10):
         # Transferir dinero
-        id2 = input("Introduce el nombre del usuario a transferir: ")
-        acc_name2 = input("Introduce el nombre de la cuenta a transferir: ")
+        while (True):
+            id2 = input("Introduce el nombre de usuario a transferir. Mínima longitud 8 caracteres: ")
+            if len(id2) >= 8:
+                break
+            print("El nombre de usuario debe tener longitud 8 o más")
+        while (True):
+            acc_name2 = input("Introduce el nombre de la cuenta a transferir. Mínima longitud 8 caracteres: ")
+            if len(acc_name2) >= 8:
+                break
+            print("El nombre de la cuenta debe tener longitud 8 o más")
         quantity = input("Introduce la cantidad a transferir: ")
         if (not str.isdigit(quantity) or int(quantity) <= 0):
             print("Error: Cantidad invalida, solo números naturales")
