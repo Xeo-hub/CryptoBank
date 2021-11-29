@@ -52,7 +52,7 @@ while(final):
                 break
             print("El nombre de usuario debe tener longitud 8 o más")
         while(True):
-            password = input("Introduce tu contraseña: ")
+            password = input("Introduce tu contraseña. Mínima longitud 8 caracteres: ")
             if len(password) >= 8:
                 break
             print("La contraseña debe tener longitud 8 o más")
