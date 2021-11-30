@@ -14,8 +14,8 @@ User_Salt_Storage()
 Account_Salt_Storage()
 
 final = True
-#Crypto.master_key = input("Acceso al sistema. \nIntroduce la clave maestra\n")
-#Crypto.master_nonce = input("Introduce la contraseña del administrador\n")
+Crypto.master_key = input("Acceso al sistema. \nIntroduce la clave maestra\n")
+Crypto.master_nonce = input("Introduce la contraseña del administrador\n")
 while(final):
     print("Elige una opción: ")
     if (Crypto.sign_up == 0):
@@ -65,7 +65,7 @@ while(final):
                 break
             print("El nombre de usuario debe tener longitud 8 o más")
         while (True):
-            password = input("Introduce tu contraseña: ")
+            password = input("Introduce tu contraseña. Mínima longitud 8 caracteres: ")
             if len(password) >= 8:
                 break
             print("La contraseña debe tener longitud 8 o más")
@@ -101,7 +101,7 @@ while(final):
     elif (Crypto.sign_up == 2 and control == 5):
         # Modificar cuenta bancaria
         while (True):
-            acc_name = input("Introduce un nombre para la cuenta. Mínima longitud 8 caracteres: ")
+            acc_name = input("Introduce un nombre de la cuenta. Mínima longitud 8 caracteres: ")
             if len(acc_name) >= 8:
                 break
             print("El nombre de la cuenta debe tener longitud 8 o más")
@@ -118,20 +118,25 @@ while(final):
         Crypto.modify_account(acc_name,key, new_key)
     elif (Crypto.sign_up == 2 and control == 6):
         # Eliminar cuenta bancaria
-        Crypto.delete_account()
+        while (True):
+            key = input("Introduce la clave de la cuenta. Mínima longitud 32 caracteres: ")
+            if (len(key) >= 32):
+                break
+            print("La clave de la cuenta debe tener longitud 32 o más")
+        Crypto.delete_account(key)
     elif (Crypto.sign_up == 2 and control == 7):
         # Mirar el saldo de la cuenta
         Crypto.check_balance()
     elif (Crypto.sign_up == 2 and control == 8):
         # Depositar dinero
-        quantity = input("Introduce la cantidad a ingresar: ")
+        quantity = input("Introduce la cantidad a ingresar. Solo números naturales: ")
         if (not str.isdigit(quantity) or int(quantity) <= 0):
             print("Error: Cantidad invalida, solo números naturales")
         else:
             Crypto.deposit(int(quantity))
     elif (Crypto.sign_up == 2 and control == 9):
         # Sacar dinero
-        quantity = input("Introduce la cantidad a sacar: ")
+        quantity = input("Introduce la cantidad a sacar. Solo números naturales: ")
         if (not str.isdigit(quantity) or int(quantity) <= 0):
             print("Error: Cantidad invalida, solo números naturales")
         else:
@@ -148,7 +153,7 @@ while(final):
             if len(acc_name2) >= 8:
                 break
             print("El nombre de la cuenta debe tener longitud 8 o más")
-        quantity = input("Introduce la cantidad a transferir: ")
+        quantity = input("Introduce la cantidad a transferir. Solo números naturales: ")
         if (not str.isdigit(quantity) or int(quantity) <= 0):
             print("Error: Cantidad invalida, solo números naturales")
         else:

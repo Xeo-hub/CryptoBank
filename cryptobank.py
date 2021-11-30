@@ -1,7 +1,8 @@
 import os
 import base64
+from datetime import datetime
 
-from cryptography.exceptions import InvalidTag, InvalidKey
+from cryptography.exceptions import InvalidTag, InvalidKey, InvalidSignature
 
 from json_parser import JsonParser
 from users import User
@@ -13,8 +14,14 @@ from user_salt_storage import User_Salt_Storage
 from account_salt_storage import Account_Salt_Storage
 from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes
+
 
 #JSON_FILES_PATH = "C:/Users/madrid/PycharmProjects/CryptoProject/JsonFiles/"
+# JSON_FILES_PATH = "C:\Users\Pablo\PycharmProjects\CryptoProject\JsonFiles\"
 JSON_FILES_PATH = "D:/PyCharm/Proyectos/CryptoProject2/JsonFiles/"
 ACCOUNTS_PATH = JSON_FILES_PATH + "Accounts.json"
 USERS_PATH = JSON_FILES_PATH + "Users.json"
@@ -27,8 +34,8 @@ class CryptoBank:
     sign_up = 0
     current_user = None
     current_account = None
-    __master_key = "abcdefghijklmnopqrstuvwxyz012345"
-    __master_nonce = "awdvhujasvdhujagvsdjhavsjdhvawjhdvajhwvdjahvdjhasbdcjhkagscaghfgvajshvbckjasvcihabwvjchvbasjhcbajshdbjkahwbcjhasb"
+    __master_key = ""
+    __master_nonce = ""
 
     @property
     def master_key(self):
@@ -130,12 +137,11 @@ class CryptoBank:
         # Para crear cuenta
         user_store = User_Storage()
         user_list = self.download_content_users()
-        user = User(id, password)
 
         # Buscamos que no exista ya uno con el mismo nombre
         for item in user_list:
             for key in item:
-                if key.find(user.user) == 0:
+                if key.find(id) == 0:
                     print("Error: Ya existe un usuario con este nombre")
                     return
 
@@ -149,7 +155,7 @@ class CryptoBank:
         # Encriptamos la password
         scrypt_password = self.scrypt_encrypt(password, salt)
         scrypt_password = self.encode_to_string(scrypt_password)
-        self.sign_up = True
+        self.sign_up = 1
         self.current_user = User(id, scrypt_password)
         # Ciframos el salt con los parámetros master
         encrypted_salt = self.encrypt_with_master_key(salt, self.master_key, self.master_nonce)
@@ -328,13 +334,15 @@ class CryptoBank:
                                 print("Cuenta modificada")
                                 return
 
-    def delete_account(self):
+    def delete_account(self, key):
         user_storage = User_Storage()
         key_store = Key_Storage()
         account_store = Account_Storage()
         user_list = self.download_content_users()
         scrypt_user_store = User_Salt_Storage()
         scrypt_user_list = self.download_content_user_salt()
+        scrypt_account_store = Account_Salt_Storage()
+        scrypt_account_list = self.download_content_account_salt()
         # Buscamos el user
         for user in user_list:
             for id in user:
@@ -351,6 +359,24 @@ class CryptoBank:
                     scrypt = scrypt_user_list[index]
                     scrypt_user_store.delete_item(scrypt)
                     scrypt_user_store.add_item(scrypt)
+                    cond = 0
+                    for account_salt in scrypt_account_list:
+                        encr_salt_xor_key = self.decode_to_bytes(account_salt)
+                        encr_salt = self.xor(encr_salt_xor_key, key.encode('ascii'))
+                        try:
+                            salt = self.decrypt_with_master_key(encr_salt, self.master_key, self.master_nonce)
+                            # Comparamos la key almacenada con la password introducida y el salt almacenado
+                            stored_key = self.get_after_slice(str(self.current_account))
+                            stored_key = self.decode_to_bytes(stored_key)
+                            self.scrypt_verify(key.encode('ascii'), salt, stored_key)
+                            cond = 1
+                            break
+                        except:
+                            continue
+                    if (cond == 0):
+                        print("Clave original incorrecta")
+                        return
+                    scrypt_account_store.delete_item(account_salt)
                     # Actualizamos en el fichero de cuentas
                     account_list = self.download_content_accounts()
                     key_list = self.download_content_keys()
@@ -397,7 +423,11 @@ class CryptoBank:
                                 key_bytes = key.encode('ascii')
                                 nonce_bytes = nonce.encode('ascii')
                                 # Desencriptamos los bytes y obtenemos el valor entero
-                                balance = self.decrypt(nonce_bytes, encrypted_value, aad, key_bytes)
+                                try:
+                                    balance = self.decrypt(nonce_bytes, encrypted_value, aad, key_bytes)
+                                except InvalidTag:
+                                    print("Error: Los datos han sido modificiados por un externo")
+                                    exit(-3)
                                 balance = self.int_from_bytes(balance)
                                 balance += quantity
                                 # Convertimos el entero a bytes para poder encriptarlo
@@ -439,11 +469,16 @@ class CryptoBank:
                                 # Desencriptamos los bytes y obtenemos el valor entero
                                 key_bytes = key.encode('ascii')
                                 nonce_bytes = nonce.encode('ascii')
-                                balance = self.decrypt(nonce_bytes, encrypted_value, aad, key_bytes)
+                                try:
+                                    balance = self.decrypt(nonce_bytes, encrypted_value, aad, key_bytes)
+                                except InvalidTag:
+                                    print("Error: Los datos han sido modificados por un tercero")
+                                    exit(-3)
+
                                 balance = self.int_from_bytes(balance)
                                 balance -= quantity
                                 # Almacenamos el valor encriptado convertido a ascii
-                                if (balance < 0):
+                                if balance < 0:
                                     print("Error: No dispone de tanto dinero en la cuenta")
                                     return
                                 key_store.delete_item([key,nonce])
@@ -454,11 +489,73 @@ class CryptoBank:
                                 # Convertimos los bytes en string para poder almacenarlo
                                 value = self.encode_to_string(new_encrypted_value)
 
+                                # Generamos texto firmado por el banco sobre que se ha sacado dinero
+                                now_date = datetime.utcnow()
+                                # Obtenemos clave privada
+                                file = open("JsonFiles/private_key.json", "rb")
+                                private_key = file.read()
+                                private_key = self.decode_to_bytes(private_key)
+                                # Deserializamos clave privada
+                                try:
+                                    private_key_deserializated = serialization.load_pem_private_key(private_key, b'elbicho64')
+                                except ValueError:
+                                    print("El PEM no se ha podido desencriptar correctamente")
+                                    exit(-3)
+                                except TypeError:
+                                    print("La password tiene un formato incorrecto")
+                                    exit(-3)
+
+                                # Generamos mensaje
+                                message = "Usuario: " + str(self.current_user.user) + "\nCantidad: " + str(quantity) + " euros\nFecha: " + str(now_date)
+                                # Firmamos mensaje
+                                message = message.encode('ascii')
+                                signature = self.sign_message(message, private_key_deserializated)
+                                str_signature = self.encode_to_string(signature)
+                                signature_file = open("JsonFiles/signature_" + str(self.current_account.acc_name) + ".json", "w")
+                                # Guardamos firma en fichero
+                                signature_file.write(str_signature)
+                                message_file = open("JsonFiles/message_" + str(self.current_account.acc_name) + ".json", "w")
+                                # Guardamos mensaje en fichero
+                                message_file.write(message.decode('ascii'))
+                                # Verificamos que el mensaje esta bien firmado con los certificados
+                                # Obtenemos clave publica
+                                public_key_deserializated = private_key_deserializated.public_key()
+                                # Verificamos con RSA
+                                try:
+                                    self.verify_message(public_key_deserializated, signature, message)
+                                except InvalidSignature:
+                                    print("La firma no coincide con la clave RSA")
+                                    exit(-3)
+                                # Generamos los certificados para las verificaciones
+                                # Obtenemos certificado AC1
+                                ac1_fd = open("certificates/ac1cert.pem", "rb")
+                                ac1 = self.get_authority(ac1_fd)
+                                # Obtenemos certificado CryptoBank
+                                cryptobank_fd = open("certificates/01.pem", "rb")
+                                cryptobank = self.get_authority(cryptobank_fd)
+                                # Comprobamos si la clave publica del mensaje se corresponde con la del certificado de CryptoBank
+                                try:
+                                    self.verify_message(cryptobank.public_key(), signature, message)
+                                except InvalidSignature:
+                                    print("La firma no coincide con la clave del certificado")
+                                    exit(-3)
+                                # Verificamos certificado de CryptoBank con autoridad raiz
+                                try:
+                                    self.verify_certificate(cryptobank, ac1)
+                                except InvalidSignature:
+                                    print("El certificado cryptobank no es fiable")
+                                    exit(-3)
+                                # Verificamos autoridad raiz consigo misma
+                                try:
+                                    self.verify_certificate(ac1, ac1)
+                                except InvalidSignature:
+                                    print("La autoridad de certificación no es fiable")
+                                    exit(-3)
                                 account_store.delete_item(account)
                                 account_store.add_item({str(self.current_account): str(value)})
                                 print("Dinero sacado")
                                 return
-        print("Error: No existe ninguna cuenta con esos parámetros")
+
 
     def transfer(self, id2, acc_name2, quantity):
         account_store = Account_Storage()
@@ -500,7 +597,6 @@ class CryptoBank:
 
         # Hacemos la transferencia
         account_list = self.download_content_accounts()
-        cond = 0
         able = False
         for account in account_list:
             for id in account:
@@ -517,7 +613,11 @@ class CryptoBank:
                     key_bytes = key.encode('ascii')
                     nonce_bytes = nonce.encode('ascii')
                     # Desencriptamos los bytes y obtenemos el valor entero
-                    balance = self.decrypt(nonce_bytes, encrypted_value, aad, key_bytes)
+                    try:
+                        balance = self.decrypt(nonce_bytes, encrypted_value, aad, key_bytes)
+                    except InvalidTag:
+                        print("Error: Los datos han sido modificados por un tercero")
+                        exit(-3)
                     balance = self.int_from_bytes(balance)
                     balance -= quantity
                     if (balance < 0):
@@ -534,37 +634,42 @@ class CryptoBank:
                     # Almacenamos el valor encriptado convertido a ascii
                     account_store.delete_item(account)
                     account_store.add_item({str(self.current_account): str(value)})
-                    cond += 1
-
-                if (id.find(sec_user_account) == 0 and able == True): #########################################
-                    str_value = account[id]
-                    aad = b"money"
-                    # Obtenemos la posición del elemento account
-                    index = account_list.index(account)
-                    # Sacamos la key y el nonce del elemento número "account" del fichero de claves
-                    key = key_list[index][0]
-                    nonce = key_list[index][1]
-                    # Obtenemos los bytes al decodificar el ascii almacenado como dinero
-                    encrypted_value = self.decode_to_bytes(str_value)
-                    key_bytes = key.encode('ascii')
-                    nonce_bytes = nonce.encode('ascii')
-                    # Desencriptamos los bytes y obtenemos el valor entero
-                    balance = self.decrypt(nonce_bytes, encrypted_value, aad, key_bytes)
-                    balance = self.int_from_bytes(balance)
-                    balance += quantity
-                    key_store.delete_item([key,nonce])
-                    account_store.delete_item(account)
-                    bytes = self.int_to_bytes(balance)
-                    # Encriptamos los bytes obtenidos
-                    new_encrypted_value = self.encrypt(bytes, aad)
-                    # Convertimos los bytes en string para poder almacenarlo
-                    value = self.encode_to_string(new_encrypted_value)
-                    # Almacenamos el valor encriptado convertido a ascii
-                    account_store.add_item({id: str(value)})
-                    cond += 1
-
-                if (cond == 2):
                     break
+
+        if (able):
+            for account in account_list:
+                for id in account:
+                    if (id.find(sec_user_account) == 0):
+                        str_value = account[id]
+                        aad = b"money"
+                        # Obtenemos la posición del elemento account
+                        index = account_list.index(account)
+                        # Sacamos la key y el nonce del elemento número "account" del fichero de claves
+                        key = key_list[index][0]
+                        nonce = key_list[index][1]
+                        # Obtenemos los bytes al decodificar el ascii almacenado como dinero
+                        encrypted_value = self.decode_to_bytes(str_value)
+                        key_bytes = key.encode('ascii')
+                        nonce_bytes = nonce.encode('ascii')
+                        # Desencriptamos los bytes y obtenemos el valor entero
+                        try:
+                            balance = self.decrypt(nonce_bytes, encrypted_value, aad, key_bytes)
+                        except InvalidTag:
+                            print("Error: Los datos han sido modificados por un tercero")
+                            exit(-3)
+                        balance = self.int_from_bytes(balance)
+                        balance += quantity
+                        key_store.delete_item([key,nonce])
+                        account_store.delete_item(account)
+                        bytes = self.int_to_bytes(balance)
+                        # Encriptamos los bytes obtenidos
+                        new_encrypted_value = self.encrypt(bytes, aad)
+                        # Convertimos los bytes en string para poder almacenarlo
+                        value = self.encode_to_string(new_encrypted_value)
+                        # Almacenamos el valor encriptado convertido a ascii
+                        account_store.add_item({id: str(value)})
+                        break
+
         print("Transferencia realizada")
 
     def check_balance(self):
@@ -590,7 +695,11 @@ class CryptoBank:
                                 # Obtenemos los bytes al decodificar el ascii almacenado como dinero
                                 encrypted_value = self.decode_to_bytes(str_value)
                                 # Desencriptamos los bytes y obtenemos el valor entero
-                                balance = self.decrypt(nonce, encrypted_value, aad, key)
+                                try:
+                                    balance = self.decrypt(nonce, encrypted_value, aad, key)
+                                except InvalidTag:
+                                    print("Error: Los datos han sido modificados por un tercero")
+                                    exit(-3)
                                 balance = self.int_from_bytes(balance)
                                 print("Dispone de " + str(balance) + "€ en su cuenta")
 
@@ -676,6 +785,52 @@ class CryptoBank:
 
     def xor(self, bytes1, bytes2):
         return bytes(a ^ b for a, b in zip(bytes1, bytes2))
+
+    def sign_message(self, bytes_message, private_key):
+        signature = private_key.sign(
+            bytes_message,
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH
+            ),
+            hashes.SHA256()
+        )
+        return signature
+
+    @staticmethod
+    def verify_message(public_key, signature, message):
+        value = public_key.verify(
+            signature,
+            message,
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH
+            ),
+            hashes.SHA256())
+        return value
+
+    @staticmethod
+    def get_authority(file):
+        # Obtenemos los datos del fichero
+        certificate_data = file.read()
+        # Deserializamos los datos que estan dentro
+        # Generamos un objeto certificado con los datos deserializados del fichero
+        authority = x509.load_pem_x509_certificate(certificate_data)
+        return authority
+
+    @staticmethod
+    def verify_certificate(certificate, upper_level):
+        # Obtenemos la clave publica del certificado
+        upper_level_public_key = upper_level.public_key()
+        # Utilizamos la autoridad superior para verificar el certificado
+        # Verificamos el certificado
+        value = upper_level_public_key.verify(
+            certificate.signature,
+            certificate.tbs_certificate_bytes,
+            padding.PKCS1v15(),
+            certificate.signature_hash_algorithm,
+        )
+        return value
 
     def sign_out(self):
         self.current_user= None
